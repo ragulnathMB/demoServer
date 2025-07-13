@@ -8,27 +8,27 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+
 app.use(cors());
 app.use(bodyParser.json());
 
-// PostgreSQL connection
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// Health check
+
 app.get('/api/health', async (req, res) => {
   try {
-    await pool.query('SELECT NOW()'); // quick DB ping
+    await pool.query('SELECT NOW()');
     res.json({ status: 'healthy', timestamp: new Date(), database: 'connected' });
   } catch (err) {
     res.status(500).json({ status: 'unhealthy', error: err.message });
   }
 });
 
-// Signup
+
 app.post('/api/signup', async (req, res) => {
   const { name, email, password, role } = req.body;
   try {
@@ -43,7 +43,7 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Login
+
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -65,7 +65,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Create purchase request
+
 app.post('/api/requests', async (req, res) => {
   const { name, purchase, vendor, tax_amount, approved, items, user_id } = req.body;
   const client = await pool.connect();
@@ -97,7 +97,7 @@ app.post('/api/requests', async (req, res) => {
   }
 });
 
-// Get all purchase requests
+
 app.get('/api/requests', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -115,7 +115,7 @@ app.get('/api/requests', async (req, res) => {
   }
 });
 
-// Approve/reject request
+
 app.put('/api/requests/:id/approve', async (req, res) => {
   const { id } = req.params;
   const { approved } = req.body;
@@ -131,10 +131,10 @@ app.put('/api/requests/:id/approve', async (req, res) => {
   }
 });
 
-// Default route
+
 app.get('/', (req, res) => {
   res.send('API is running');
 });
 
-// Start server
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
