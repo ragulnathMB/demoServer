@@ -8,16 +8,27 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 
-
+// PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
+// Health check
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT NOW()'); // quick DB ping
+    res.json({ status: 'healthy', timestamp: new Date(), database: 'connected' });
+  } catch (err) {
+    res.status(500).json({ status: 'unhealthy', error: err.message });
+  }
+});
 
+// Signup
 app.post('/api/signup', async (req, res) => {
   const { name, email, password, role } = req.body;
   try {
@@ -32,23 +43,29 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
+// Login
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   try {
     const userRes = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (userRes.rows.length === 0)
+      return res.status(404).json({ error: 'User not found' });
 
     const user = userRes.rows[0];
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(403).json({ error: 'Invalid credentials' });
+    if (!isMatch)
+      return res.status(403).json({ error: 'Invalid credentials' });
 
-    res.json({ message: 'Login successful', user: { id: user.id, name: user.name, role: user.role } });
+    res.json({
+      message: 'Login successful',
+      user: { id: user.id, name: user.name, role: user.role }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-
+// Create purchase request
 app.post('/api/requests', async (req, res) => {
   const { name, purchase, vendor, tax_amount, approved, items, user_id } = req.body;
   const client = await pool.connect();
@@ -66,7 +83,7 @@ app.post('/api/requests', async (req, res) => {
     for (const item of items) {
       await client.query(
         'INSERT INTO items (request_id, item_no, legal_entity) VALUES ($1, $2, $3)',
-        [requestId, item.itemNo, item.legal_entity]
+        [requestId, item.item_no, item.legal_entity]
       );
     }
 
@@ -80,40 +97,44 @@ app.post('/api/requests', async (req, res) => {
   }
 });
 
-
+// Get all purchase requests
 app.get('/api/requests', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT pr.*, u.name as user_name,
-        json_agg(json_build_object('itemNo', i.item_no, 'legal_entity', i.legal_entity)) AS items
+        json_agg(json_build_object('item_no', i.item_no, 'legal_entity', i.legal_entity)) AS items
       FROM purchase_requests pr
       JOIN users u ON pr.user_id = u.id
       LEFT JOIN items i ON pr.id = i.request_id
       GROUP BY pr.id, u.name
       ORDER BY pr.id DESC
     `);
-
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-
+// Approve/reject request
 app.put('/api/requests/:id/approve', async (req, res) => {
   const { id } = req.params;
   const { approved } = req.body;
 
   try {
-    await pool.query('UPDATE purchase_requests SET approved = $1 WHERE id = $2', [approved, id]);
+    await pool.query(
+      'UPDATE purchase_requests SET approved = $1 WHERE id = $2',
+      [approved, id]
+    );
     res.json({ message: `Request ${approved ? 'approved' : 'rejected'}` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// Default route
 app.get('/', (req, res) => {
-  res.send('API is running ✅');
+  res.send('API is running');
 });
 
+// Start server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
